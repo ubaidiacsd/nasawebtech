@@ -1,0 +1,465 @@
+DOCKER SWARM ON DEBIAN 13 Complete Beginner-Friendly Lab Guide Topology:
+1 Manager + 2 Worker Nodes
+
+============================================================ 1. LAB
+OVERVIEW ============================================================
+
+In this lab, you will create a Docker Swarm cluster using three Debian
+13 machines:
+
+    Manager:  192.168.56.130
+    Worker1:  192.168.56.131
+    Worker2:  192.168.56.132
+
+IMPORTANT: - These are example IP addresses. Replace them with the
+actual IP addresses of your three Debian 13 VMs. - All three machines
+should be on the same reachable network. - Give each VM a unique
+hostname. - Run commands on the machine indicated in each section. -
+Commands using sudo assume your login user has sudo privileges.
+
+What is Docker Swarm? Docker Swarm is Docker’s built-in container
+orchestration feature. It groups multiple Docker hosts into one cluster.
+The manager controls the cluster, while worker nodes run the containers
+(tasks) assigned to them.
+
+Roles: - Manager: maintains cluster state, schedules services, manages
+nodes. - Worker1 and Worker2: receive tasks from the manager and run
+containers.
+
+For a small learning lab, one manager is fine. In production, use three
+or five manager nodes for manager fault tolerance. With only one
+manager, the cluster cannot be managed if that manager goes offline.
+
+============================================================ 2.
+REQUIREMENTS AND NETWORK PORTS
+============================================================
+
+Requirements: - Three Debian 13 VMs. - Network connectivity between all
+three VMs. - Internet access for installing Docker and pulling images. -
+Sufficient free disk space. - Accurate IP addresses and working DNS/host
+entries (either is fine).
+
+Docker Swarm network ports: - TCP 2377: cluster management and manager
+communication. - TCP and UDP 7946: communication between nodes. - UDP
+4789: overlay network traffic. - IP protocol 50 (ESP): may be required
+for encrypted overlay networks.
+
+Allow these between the three machines in your VM firewall/network
+firewall. Do not expose these ports publicly to the internet. For a
+simple isolated host-only lab, ensure the VMs can reach each other on
+the host-only network.
+
+Check each machine’s IP: ip -br addr
+
+Check connectivity from each machine: ping -c 4 192.168.56.130 ping -c 4
+192.168.56.131 ping -c 4 192.168.56.132
+
+Replace the example addresses with your actual addresses. A machine does
+not need to ping its own address for the test to be useful.
+
+Optional: set hostnames.
+
+On manager: sudo hostnamectl set-hostname swarm-manager
+
+On worker 1: sudo hostnamectl set-hostname swarm-worker1
+
+On worker 2: sudo hostnamectl set-hostname swarm-worker2
+
+Log out and back in, or open a new terminal, if the prompt does not
+update.
+
+Optional /etc/hosts entries: add the following lines on ALL three
+machines: 192.168.56.130 swarm-manager 192.168.56.131 swarm-worker1
+192.168.56.132 swarm-worker2
+
+Edit the file: sudo nano /etc/hosts
+
+Save in nano with Ctrl+O, Enter, then Ctrl+X.
+
+============================================================ 3. INSTALL
+DOCKER ENGINE ON ALL THREE MACHINES
+============================================================
+
+Run this entire section on the manager, worker 1, and worker 2.
+
+First update Debian: sudo apt update sudo apt install -y ca-certificates
+curl
+
+Recommended method: use Docker’s official Debian APT repository.
+
+Create the keyring directory: sudo install -m 0755 -d /etc/apt/keyrings
+
+Download Docker’s official signing key: sudo curl -fsSL
+https://download.docker.com/linux/debian/gpg
+-o /etc/apt/keyrings/docker.asc
+
+Make the key readable by APT: sudo chmod a+r
+/etc/apt/keyrings/docker.asc
+
+Add the Docker repository: sudo tee
+/etc/apt/sources.list.d/docker.sources > /dev/null <<EOF Types: deb
+URIs: https://download.docker.com/linux/debian Suites:
+$(. /etc/os-release && echo "$VERSION_CODENAME”) Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc EOF
+
+Update package information: sudo apt update
+
+Install Docker Engine, CLI, containerd, Buildx and Compose plugin: sudo
+apt install -y docker-ce docker-ce-cli containerd.io
+docker-buildx-plugin docker-compose-plugin
+
+Start Docker and enable it at boot: sudo systemctl enable –now docker
+
+Check Docker: sudo systemctl status docker –no-pager
+
+Check versions: sudo docker –version sudo docker compose version
+
+Test Docker: sudo docker run hello-world
+
+Expected result: Docker downloads the hello-world image if necessary,
+runs it, and prints a message confirming that the installation appears
+to be working.
+
+If the Docker service is not active: sudo systemctl restart docker sudo
+systemctl status docker –no-pager
+
+Security note: Use sudo for Docker commands in this lab. Adding a user
+to the docker group grants privileges effectively equivalent to root.
+Only do that if you understand and accept the security implications.
+
+============================================================ 4.
+INITIALIZE THE SWARM ON THE MANAGER
+============================================================
+
+Run this section ONLY on the manager machine.
+
+Confirm its IP address: ip -br addr
+
+Initialize the cluster using the manager’s reachable IP: sudo docker
+swarm init –advertise-addr 192.168.56.130
+
+Replace 192.168.56.130 with the manager’s actual IP on the network that
+the workers will use to reach it.
+
+If successful, Docker prints a message similar to: Swarm initialized:
+current node (….) is now a manager.
+
+It also prints a docker swarm join command containing a token. The
+command will look similar to: docker swarm join –token SWMTKN-1-…
+192.168.56.130:2377
+
+IMPORTANT: - The token is a credential. Do not publish it or share it
+publicly. - Copy the complete worker join command and keep it safe. - Do
+not use the manager token on workers. - The join token is unique to your
+cluster; never copy the example token.
+
+Check the manager: sudo docker info sudo docker node ls
+
+At this point, node ls should show the manager as Leader (or manager).
+
+============================================================ 5. JOIN
+WORKER 1 TO THE SWARM
+============================================================
+
+Run this section ONLY on worker 1.
+
+Use the exact worker join command printed by your manager. It will look
+like: sudo docker swarm join –token SWMTKN-1-REPLACE-WITH-YOUR-TOKEN
+192.168.56.130:2377
+
+Replace the token with the real token from your manager. The manager
+address must be reachable from worker 1.
+
+Expected success message: This node joined a swarm as a worker.
+
+============================================================ 6. JOIN
+WORKER 2 TO THE SWARM
+============================================================
+
+Run this section ONLY on worker 2.
+
+Run the same worker join command, using the same worker token: sudo
+docker swarm join –token SWMTKN-1-REPLACE-WITH-YOUR-TOKEN
+192.168.56.130:2377
+
+Expected success message: This node joined a swarm as a worker.
+
+============================================================ 7. VERIFY
+THE THREE-NODE CLUSTER
+============================================================
+
+Run on the manager: sudo docker node ls
+
+Expected layout (IDs and status may differ):
+
+    HOSTNAME          STATUS    AVAILABILITY   MANAGER STATUS
+    swarm-manager     Ready     Active         Leader
+    swarm-worker1     Ready     Active
+    swarm-worker2     Ready     Active
+
+All three nodes should show Ready and Active. Only the manager has a
+manager status. The two workers should have no manager status.
+
+If a worker is missing: - Check that its join command succeeded. - Check
+that worker can reach manager IP. - Check TCP port 2377 between worker
+and manager. - Check that Docker is running on all machines. - Check the
+token has not been mistyped or rotated.
+
+============================================================ 8. DEPLOY
+YOUR FIRST SWARM SERVICE
+============================================================
+
+A service is the desired state of an application in the Swarm. The
+manager schedules one or more task replicas across eligible nodes.
+
+Run on the manager: sudo docker service create –name web-demo –replicas
+3
+–publish published=8080,target=80
+nginx:alpine
+
+This creates an Nginx web service with three replicas. Port 8080 on the
+Swarm nodes is published and forwarded to port 80 in the service tasks.
+
+Check the service: sudo docker service ls
+
+See where tasks are running: sudo docker service ps web-demo
+
+Inspect the service: sudo docker service inspect web-demo
+
+Wait until the tasks show Running: sudo docker service ps web-demo
+
+Test from a machine that can reach the cluster: curl
+http://192.168.56.130:8080
+
+You can also test worker node IPs: curl http://192.168.56.131:8080 curl
+http://192.168.56.132:8080
+
+Replace addresses with your actual IPs. The Swarm routing mesh normally
+allows a published service port to be reached through any node, even if
+that particular node is not running a task for the service.
+
+If curl is not installed: sudo apt install -y curl
+
+============================================================ 9. SCALE
+THE SERVICE ============================================================
+
+On the manager, increase the service to five replicas: sudo docker
+service scale web-demo=5
+
+Check: sudo docker service ls sudo docker service ps web-demo
+
+Reduce it to two replicas: sudo docker service scale web-demo=2
+
+Docker will reconcile the service to the requested number of running
+tasks, subject to available resources and node availability.
+
+============================================================ 10. SEE
+WHICH NODE RUNS EACH CONTAINER
+============================================================
+
+On the manager: sudo docker service ps web-demo
+
+The NODE column shows the node assigned to each task.
+
+On each machine, list local containers: sudo docker ps
+
+Remember: - docker ps shows containers on the current machine. - docker
+service ps, when run on a manager, shows tasks across the Swarm.
+
+============================================================ 11. DEPLOY
+A SERVICE WITH A REPLICATED PLACEMENT
+============================================================
+
+Example: create a second service with two replicas: sudo docker service
+create –name app-demo –replicas 2
+–publish published=8081,target=80 nginx:alpine
+
+Check: sudo docker service ls sudo docker service ps app-demo
+
+Remove it when finished: sudo docker service rm app-demo
+
+============================================================ 12. UPDATE
+A SERVICE ============================================================
+
+Update the image: sudo docker service update –image nginx:latest
+web-demo
+
+Check rollout: sudo docker service ps web-demo
+
+Roll back the previous service specification if needed: sudo docker
+service rollback web-demo
+
+Use a specific, tested image tag for real deployments rather than
+relying on a floating tag such as latest.
+
+============================================================ 13. DRAIN A
+WORKER FOR MAINTENANCE
+============================================================
+
+To stop scheduling new tasks on worker 1 and move its Swarm tasks
+elsewhere, run on the manager: sudo docker node update –availability
+drain swarm-worker1
+
+Check: sudo docker node ls sudo docker service ps web-demo
+
+After maintenance, make it schedulable again: sudo docker node update
+–availability active swarm-worker1
+
+Use the exact node hostname shown by: sudo docker node ls
+
+============================================================ 14. LABEL
+NODES AND CONTROL PLACEMENT (OPTIONAL)
+============================================================
+
+Add a label to worker 1: sudo docker node update –label-add purpose=web
+swarm-worker1
+
+Create a service that is constrained to nodes with that label: sudo
+docker service create –name labeled-web
+–constraint ‘node.labels.purpose==web’
+–replicas 1 nginx:alpine
+
+Check: sudo docker service ps labeled-web
+
+Remove the optional service: sudo docker service rm labeled-web
+
+============================================================ 15. REMOVE
+A SERVICE ============================================================
+
+Remove web-demo: sudo docker service rm web-demo
+
+Verify: sudo docker service ls
+
+Removing a service asks Swarm to stop and remove its tasks.
+
+============================================================ 16. LEAVE
+THE SWARM / RESET THE LAB
+============================================================
+
+Only do this if you want to dismantle the cluster.
+
+On each worker: sudo docker swarm leave
+
+Then on the manager: sudo docker swarm leave –force
+
+WARNING: This removes the nodes from the Swarm. Do not run these
+commands if you want to keep your cluster.
+
+============================================================ 17.
+TROUBLESHOOTING
+============================================================
+
+A. “This node is already part of a swarm” Check: sudo docker info If you
+intentionally want to remove this node from its current Swarm: sudo
+docker swarm leave Then join the correct cluster.
+
+B. Worker cannot join / connection timed out On the worker: ping -c 4
+192.168.56.130 nc -vz 192.168.56.130 2377
+
+If nc is missing: sudo apt install -y netcat-openbsd
+
+Check Docker: sudo systemctl status docker –no-pager
+
+Check firewall/network rules for TCP 2377, TCP/UDP 7946 and UDP 4789.
+Use the manager’s correct reachable IP, not 127.0.0.1 or localhost.
+
+C. Join token is lost Run on the manager: sudo docker swarm join-token
+worker
+
+Docker prints a fresh/current worker join command. Use it on both
+workers.
+
+To display the manager join command: sudo docker swarm join-token
+manager
+
+Do not give the manager token to worker nodes.
+
+D. A node is Down or Unreachable On that node: sudo systemctl restart
+docker sudo systemctl status docker –no-pager
+
+On the manager: sudo docker node ls sudo docker node inspect
+swarm-worker1
+
+Check power state, IP address, network connection and firewall.
+
+E. Service has fewer replicas than requested On the manager: sudo docker
+service ps web-demo sudo docker service inspect web-demo
+
+Look for rejected or failed tasks. Check image availability, node
+resources, placement constraints, port conflicts and network
+connectivity.
+
+F. Image pull fails Check internet/DNS: ping -c 3 1.1.1.1 getent hosts
+registry-1.docker.io
+
+Try: sudo docker pull nginx:alpine
+
+If using a private image registry, authenticate and ensure the nodes can
+access the image. For private images, consider: sudo docker login and
+deploy with appropriate registry authentication options. Protect
+credentials; do not paste passwords or tokens into shared notes.
+
+G. Published port does not respond Check: sudo docker service ls sudo
+docker service ps web-demo sudo ss -lntup Check firewall rules and test
+from a machine on the same reachable network. Confirm you are using the
+published port (8080 in this guide).
+
+H. Node hostname mismatch On the manager: sudo docker node ls Use the
+exact hostname displayed in commands such as node update.
+
+============================================================ 18. USEFUL
+DOCKER SWARM COMMANDS
+============================================================
+
+Cluster: sudo docker info sudo docker node ls sudo docker swarm init
+–advertise-addr MANAGER_IP sudo docker swarm join-token worker sudo
+docker swarm leave
+
+Nodes: sudo docker node ls sudo docker node inspect NODE_NAME sudo
+docker node update –availability drain NODE_NAME sudo docker node update
+–availability active NODE_NAME
+
+Services: sudo docker service ls sudo docker service create –name NAME
+–replicas 3 IMAGE sudo docker service ps SERVICE_NAME sudo docker
+service inspect SERVICE_NAME sudo docker service scale SERVICE_NAME=5
+sudo docker service update –image IMAGE SERVICE_NAME sudo docker service
+rollback SERVICE_NAME sudo docker service rm SERVICE_NAME
+
+Containers on the current host: sudo docker ps sudo docker logs
+CONTAINER_ID
+
+============================================================ 19. FINAL
+PRACTICAL CHECKLIST
+============================================================
+
+[ ] Three Debian 13 VMs are running. [ ] Each VM has a unique hostname
+and correct IP. [ ] All machines can reach one another. [ ] Docker
+Engine is installed on all three. [ ] Docker service is active on all
+three. [ ] Swarm initialized on the manager using its reachable IP. [ ]
+Worker 1 joined using the worker token. [ ] Worker 2 joined using the
+worker token. [ ] Manager shows all three nodes as Ready. [ ] Nginx
+service created with three replicas. [ ] Service tasks show Running. [ ]
+HTTP test works through a node’s published port. [ ] Service can be
+scaled and removed.
+
+============================================================ 20.
+IMPORTANT SECURITY AND PRODUCTION NOTES
+============================================================
+
+-   Keep Docker Engine and Debian updated.
+-   Do not expose Swarm management ports to the public internet.
+-   Protect join tokens; anyone with a valid join token and network
+    access may be able to join according to that token’s role.
+-   Use least-privilege firewall rules.
+-   Use trusted images and pinned image versions/digests for important
+    systems.
+-   Store secrets using Docker Swarm secrets rather than plain text in
+    images or environment files.
+-   One manager is a single point of failure. For production, use an odd
+    number of managers (commonly 3 or 5) to maintain quorum.
+-   Back up important application data separately. A Swarm service does
+    not automatically make application data highly available.
+-   This guide is a learning lab, not a complete production hardening
+    plan.
+
+END OF GUIDE
