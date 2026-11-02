@@ -1,0 +1,189 @@
+ANSIBLE LAB GUIDE — USERS, GROUPS, FILE PERMISSIONS AND PACKAGES
+=================================================================
+
+Environment
+-----------
+This example is intended for your Debian 13 Ansible master/node lab.
+Run the playbook from the MASTER machine. The inventory should contain
+the IP address or hostname of your Debian node.
+
+Files
+-----
+1. playbook.yaml  - Ansible tasks
+2. inventory.ini - hosts to manage (create this yourself)
+
+Example inventory.ini
+---------------------
+[debian_nodes]
+192.168.56.133 ansible_user=YOUR_NODE_USERNAME
+
+Replace YOUR_NODE_USERNAME with the Linux account you use to SSH into
+the node. Make sure SSH key-based login works before running Ansible.
+
+IMPORTANT: The playbook uses become: true, so the remote account must
+have sudo privileges. If sudo requires a password, use --ask-become-pass.
+
+1. Check Ansible installation and connectivity
+-----------------------------------------------
+ansible --version
+ansible-inventory -i inventory.ini --list
+ansible all -i inventory.ini -m ping
+
+2. Run the playbook
+-------------------
+ansible-playbook -i inventory.ini playbook.yaml
+
+If sudo asks for a password:
+ansible-playbook -i inventory.ini playbook.yaml --ask-become-pass
+
+Check syntax before running:
+ansible-playbook -i inventory.ini playbook.yaml --syntax-check
+
+Show what would change (check mode):
+ansible-playbook -i inventory.ini playbook.yaml --check
+
+Show detailed execution:
+ansible-playbook -i inventory.ini playbook.yaml -v
+ansible-playbook -i inventory.ini playbook.yaml -vvv
+
+3. What the playbook does
+-------------------------
+A. Updates the Debian APT package cache.
+B. Creates two groups: developers and admins.
+C. Creates users alice and bob.
+   - alice: primary group developers, secondary group admins
+   - bob: primary group admins, secondary group developers
+D. Installs tree, curl, vim, and git.
+E. Creates /opt/ansible-lab.
+F. Creates /opt/ansible-lab/shared.txt with owner root, group developers,
+   and mode 0660.
+
+The example usernames and group names are for practice. Change the
+variables at the top of playbook.yaml to suit your lab.
+
+4. Verify users and groups on the NODE
+--------------------------------------
+id alice
+id bob
+getent passwd alice
+getent passwd bob
+getent group developers
+getent group admins
+
+List local users:
+cut -d: -f1 /etc/passwd
+
+List groups:
+cut -d: -f1 /etc/group
+
+5. Verify packages on the NODE
+------------------------------
+dpkg -l | grep -E 'tree|curl|vim|git'
+tree --version
+curl --version
+vim --version
+git --version
+
+6. Verify file ownership and permissions on the NODE
+----------------------------------------------------
+ls -ld /opt/ansible-lab
+ls -l /opt/ansible-lab/shared.txt
+stat /opt/ansible-lab/shared.txt
+
+Expected shared.txt permissions:
+-rw-rw----  root developers  ... shared.txt
+
+Expected directory mode:
+drwxrws---  root developers  ... /opt/ansible-lab
+
+7. Important Linux permission commands
+--------------------------------------
+chmod 755 filename
+chmod 644 filename
+chmod 600 filename
+chmod 660 filename
+chmod -R 750 directory
+
+chown user filename
+chown user:group filename
+chgrp group filename
+
+Permission number reference:
+r (read)    = 4
+w (write)   = 2
+x (execute) = 1
+
+7   = rwx
+6   = rw-
+5   = r-x
+4   = r--
+
+Examples:
+755 = owner rwx, group r-x, others r-x
+644 = owner rw-, group r--, others r--
+660 = owner rw-, group rw-, others ---
+700 = owner rwx, group ---, others ---
+2770 = setgid + owner/group rwx, others ---
+
+The leading 2 in 2770 sets the setgid bit on a directory. New files
+created inside normally inherit the directory's group.
+
+8. Important Linux user and group commands
+------------------------------------------
+sudo adduser alice
+sudo usermod -aG developers alice
+sudo usermod -g developers alice
+sudo groupadd developers
+sudo groupdel developers
+id alice
+groups alice
+getent group developers
+
+Use usermod -aG to add a supplementary group without removing the
+user's existing supplementary groups. Be careful: usermod -G without
+-a can replace the supplementary group list.
+
+9. Important Ansible commands
+-----------------------------
+ansible all -i inventory.ini -m ping
+ansible all -i inventory.ini -m command -a "hostname"
+ansible all -i inventory.ini -m command -a "id"
+ansible-playbook -i inventory.ini playbook.yaml --syntax-check
+ansible-playbook -i inventory.ini playbook.yaml --check
+ansible-playbook -i inventory.ini playbook.yaml
+ansible-playbook -i inventory.ini playbook.yaml --ask-become-pass
+
+10. Common troubleshooting
+-------------------------
+UNREACHABLE / SSH permission denied:
+- Confirm the node IP and ansible_user in inventory.ini.
+- From master, test: ssh YOUR_NODE_USERNAME@192.168.56.133
+- Confirm the public key is in the node user's ~/.ssh/authorized_keys.
+- Check that the node user can log in and has sudo privileges.
+
+Missing sudo permission:
+- On the node, add the account to sudo (as an administrator):
+  sudo usermod -aG sudo YOUR_NODE_USERNAME
+- Log out and back in, then test:
+  sudo -v
+
+APT lock or package errors:
+- Check whether another apt process is running.
+- Run sudo apt update manually on the node and retry.
+
+YAML syntax error:
+- Keep indentation consistent (spaces, not tabs).
+- Run the --syntax-check command before execution.
+
+NOTE ABOUT USER GROUPS
+----------------------
+The playbook sets append: false because it explicitly defines the complete
+supplementary group list for each managed user. If you want to preserve
+other supplementary groups already assigned to those users, change
+append: false to append: true. The primary group is still set by
+primary_group.
+
+SAFETY
+------
+This is a lab example. Do not use the sample users/groups or change
+existing production account memberships without checking the impact.

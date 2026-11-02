@@ -1,0 +1,80 @@
+---
+- name: Manage users, groups, file permissions, and packages
+  hosts: all
+  become: true
+
+  vars:
+    # Change these names/groups as needed for your lab.
+    managed_groups:
+      - developers
+      - admins
+
+    managed_users:
+      - name: alice
+        primary_group: developers
+        secondary_groups:
+          - admins
+        shell: /bin/bash
+        create_home: true
+
+      - name: bob
+        primary_group: admins
+        secondary_groups:
+          - developers
+        shell: /bin/bash
+        create_home: true
+
+    packages_to_install:
+      - tree
+      - curl
+      - vim
+      - git
+
+    managed_directory: /opt/ansible-lab
+    managed_file: /opt/ansible-lab/shared.txt
+
+  tasks:
+    - name: Update APT package cache (Debian/Ubuntu)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Create required groups
+      ansible.builtin.group:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ managed_groups }}"
+
+    - name: Create users and assign their groups
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        group: "{{ item.primary_group }}"
+        groups: "{{ item.secondary_groups | join(',') }}"
+        append: false
+        shell: "{{ item.shell }}"
+        create_home: "{{ item.create_home }}"
+        state: present
+      loop: "{{ managed_users }}"
+
+    - name: Install required packages
+      ansible.builtin.apt:
+        name: "{{ packages_to_install }}"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Create lab directory with group permissions
+      ansible.builtin.file:
+        path: "{{ managed_directory }}"
+        state: directory
+        owner: root
+        group: developers
+        mode: "2770"
+
+    - name: Create shared file with specified permissions
+      ansible.builtin.file:
+        path: "{{ managed_file }}"
+        state: touch
+        owner: root
+        group: developers
+        mode: "0660"
