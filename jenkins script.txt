@@ -1,0 +1,21 @@
+docker build -t sgdevops01/apachemyapache:latest .
+docker push sgdevops01/apachemyapache:latest
+
+ssh admin@3.26.72.100 "docker pull sgdevops01/apachemyapache:latest"
+
+ssh admin@3.26.72.100 '
+if [ "$(docker ps -aq -f name=papapapap)" ]; then
+    docker rm -f papapapap
+fi
+docker run -d -p 80:80 --name papapapap sgdevops01/apachemyapache:latest
+'
+
+
+
+cmd commands:
+
+ssh -i "C:\Users\Shivansh Gour\Downloads\Webkey.pem" admin@3.26.72.100
+.ssh me authorized key me changes krna hai
+than install docker 
+and add the $USER in the docker group
+than reboot the server or cmd

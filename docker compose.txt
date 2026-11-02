@@ -1,0 +1,13 @@
+ sudo apt update
+  sudo apt install docker.io docker-compose -y
+   sudo systemctl start docker
+    sudo systemctl enable docker
+     mkdir docker-compose-task
+      cd docker-compose-task
+       mkdir website1 website2
+        cd website1
+         nano index.html
+          cd website2
+           nano index.html
+            nano docker-compose.yml
+             sudo docker-compose up -d
